@@ -1,6 +1,6 @@
 FROM nvidia/cuda
 
-MAINTAINER Kristoph Junge <kristoph.junge@gmail.com>
+LABEL maintainer='Michaël "e7d" Ferrand <michael@e7d.io>'
 
 RUN apt-get update && \
     apt-get -y install golang --no-install-recommends && \
@@ -8,9 +8,9 @@ RUN apt-get update && \
 
 WORKDIR /go
 
-COPY . .
+COPY src/app.go app.go
 
-RUN go build -v -o bin/app src/app.go
+RUN go build -v -o bin/app app.go
 
 EXPOSE 9202
 
