@@ -2,12 +2,14 @@ package main
 
 import (
 	"encoding/xml"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 )
 
 const LISTEN_ADDRESS = ":9202"
@@ -20,6 +22,7 @@ type NvidiaSmiLog struct {
 	CudaVersion   string `xml:"cuda_version"`
 	AttachedGPUs  string `xml:"attached_gpus"`
 	GPU           []struct {
+		Id                       string `xml:"id,attr"`
 		ProductName              string `xml:"product_name"`
 		ProductBrand             string `xml:"product_brand"`
 		DisplayMode              string `xml:"display_mode"`
@@ -253,6 +256,45 @@ func formatValue(key string, meta string, value string) string {
 	return result + " " + value + "\n"
 }
 
+func filterUnit(s string) string {
+	r := regexp.MustCompile(`(?P<value>[\d\.]+) (?P<power>[KMGT]?[i]?)(?P<unit>.*)`)
+	match := r.FindStringSubmatch(s)
+	if len(match) == 0 {
+		return "0"
+	}
+
+	result := make(map[string]string)
+	for i, name := range r.SubexpNames() {
+		if i != 0 && name != "" {
+			result[name] = match[i]
+		}
+	}
+
+	power := result["power"]
+	if value, err := strconv.ParseFloat(result["value"], 32); err == nil {
+		switch power {
+		case "K":
+			value *= 1000
+		case "M":
+			value *= 1000 * 1000
+		case "G":
+			value *= 1000 * 1000 * 1000
+		case "T":
+			value *= 1000 * 1000 * 1000 * 1000
+		case "Ki":
+			value *= 1024
+		case "Mi":
+			value *= 1024 * 1024
+		case "Gi":
+			value *= 1024 * 1024 * 1024
+		case "Ti":
+			value *= 1024 * 1024 * 1024 * 1024
+		}
+		return fmt.Sprintf("%g", value)
+	}
+	return "0"
+}
+
 func filterNumber(value string) string {
 	r := regexp.MustCompile("[^0-9.]")
 	return r.ReplaceAllString(value, "")
@@ -286,98 +328,59 @@ func metrics(w http.ResponseWriter, r *http.Request) {
 	// Output
 	io.WriteString(w, formatValue("nvidiasmi_driver_version", "", xmlData.DriverVersion))
 	io.WriteString(w, formatValue("nvidiasmi_cuda_version", "", xmlData.CudaVersion))
-	io.WriteString(w, formatValue("nvidiasmi_attached_gpus", "", filterNumber(xmlData.AttachedGPUs)))
+	io.WriteString(w, formatValue("nvidiasmi_attached_gpus", "", xmlData.AttachedGPUs))
 	for _, GPU := range xmlData.GPU {
-		io.WriteString(w, formatValue("nvidiasmi_product_name", "uuid=\""+GPU.UUID+"\"", GPU.ProductName))
-		io.WriteString(w, formatValue("nvidiasmi_product_brand", "uuid=\""+GPU.UUID+"\"", GPU.ProductBrand))
-		io.WriteString(w, formatValue("nvidiasmi_display_mode", "uuid=\""+GPU.UUID+"\"", GPU.DisplayMode))
-		io.WriteString(w, formatValue("nvidiasmi_display_active", "uuid=\""+GPU.UUID+"\"", GPU.DisplayActive))
-		io.WriteString(w, formatValue("nvidiasmi_persistence_mode", "uuid=\""+GPU.UUID+"\"", GPU.PersistenceMode))
-		io.WriteString(w, formatValue("nvidiasmi_accounting_mode", "uuid=\""+GPU.UUID+"\"", GPU.AccountingMode))
-		io.WriteString(w, formatValue("nvidiasmi_accounting_mode_buffer_size", "uuid=\""+GPU.UUID+"\"", GPU.AccountingModeBufferSize))
-		io.WriteString(w, formatValue("nvidiasmi_driver_model_current", "uuid=\""+GPU.UUID+"\"", GPU.DriverModel.CurrentDM))
-		io.WriteString(w, formatValue("nvidiasmi_driver_model_pending", "uuid=\""+GPU.UUID+"\"", GPU.DriverModel.PendingDM))
-		io.WriteString(w, formatValue("nvidiasmi_serial", "uuid=\""+GPU.UUID+"\"", GPU.Serial))
-		io.WriteString(w, formatValue("nvidiasmi_uuid", "uuid=\""+GPU.UUID+"\"", GPU.UUID))
-		io.WriteString(w, formatValue("nvidiasmi_minor_number", "uuid=\""+GPU.UUID+"\"", GPU.MinorNumber))
-		io.WriteString(w, formatValue("nvidiasmi_vbios_version", "uuid=\""+GPU.UUID+"\"", GPU.VbiosVersion))
-		io.WriteString(w, formatValue("nvidiasmi_multi_gpu_board", "uuid=\""+GPU.UUID+"\"", GPU.MultiGPUBoard))
-		io.WriteString(w, formatValue("nvidiasmi_board_id", "uuid=\""+GPU.UUID+"\"", GPU.BoardId))
-		io.WriteString(w, formatValue("nvidiasmi_gpu_part_number", "uuid=\""+GPU.UUID+"\"", GPU.GPUPartNumber))
-		io.WriteString(w, formatValue("nvidiasmi_inforom_img_version", "uuid=\""+GPU.UUID+"\"", GPU.InfoRomVersion.ImgVersion))
-		io.WriteString(w, formatValue("nvidiasmi_inforom_oem_object", "uuid=\""+GPU.UUID+"\"", GPU.InfoRomVersion.OemObject))
-		io.WriteString(w, formatValue("nvidiasmi_inforom_ecc_object", "uuid=\""+GPU.UUID+"\"", GPU.InfoRomVersion.EccObject))
-		io.WriteString(w, formatValue("nvidiasmi_inforom_pwr_object", "uuid=\""+GPU.UUID+"\"", GPU.InfoRomVersion.PwrObject))
-		io.WriteString(w, formatValue("nvidiasmi_gpu_operation_mode_current", "uuid=\""+GPU.UUID+"\"", GPU.GPUOperationMode.Current))
-		io.WriteString(w, formatValue("nvidiasmi_gpu_operation_mode_pending", "uuid=\""+GPU.UUID+"\"", GPU.GPUOperationMode.Pending))
-		io.WriteString(w, formatValue("nvidiasmi_gpu_virtualization_mode", "uuid=\""+GPU.UUID+"\"", GPU.GPUVirtualizationMode.VirtualizationMode))
-		io.WriteString(w, formatValue("nvidiasmi_gpu_host_vgpu_mode", "uuid=\""+GPU.UUID+"\"", GPU.GPUVirtualizationMode.HostVGPUMode))
-		io.WriteString(w, formatValue("nvidiasmi_ibmnpu_relaxed_ordering_mode", "uuid=\""+GPU.UUID+"\"", GPU.IBMNPU.RelaxedOrderingMode))
-		io.WriteString(w, formatValue("nvidiasmi_pci_bus", "uuid=\""+GPU.UUID+"\"", GPU.PCI.Bus))
-		io.WriteString(w, formatValue("nvidiasmi_pci_device", "uuid=\""+GPU.UUID+"\"", GPU.PCI.Device))
-		io.WriteString(w, formatValue("nvidiasmi_pci_domain", "uuid=\""+GPU.UUID+"\"", GPU.PCI.Domain))
-		io.WriteString(w, formatValue("nvidiasmi_pci_device_id", "uuid=\""+GPU.UUID+"\"", GPU.PCI.DeviceId))
-		io.WriteString(w, formatValue("nvidiasmi_pci_bus_id", "uuid=\""+GPU.UUID+"\"", GPU.PCI.BusId))
-		io.WriteString(w, formatValue("nvidiasmi_pci_sub_system_id", "uuid=\""+GPU.UUID+"\"", GPU.PCI.SubSystemId))
-		io.WriteString(w, formatValue("nvidiasmi_pci_pcie_gen_max", "uuid=\""+GPU.UUID+"\"", GPU.PCI.GPULinkInfo.PCIeGen.Max))
-		io.WriteString(w, formatValue("nvidiasmi_pci_pcie_gen_current", "uuid=\""+GPU.UUID+"\"", GPU.PCI.GPULinkInfo.PCIeGen.Current))
-		io.WriteString(w, formatValue("nvidiasmi_pci_link_width_max", "uuid=\""+GPU.UUID+"\"", GPU.PCI.GPULinkInfo.LinkWidth.Max))
-		io.WriteString(w, formatValue("nvidiasmi_pci_link_width_current", "uuid=\""+GPU.UUID+"\"", GPU.PCI.GPULinkInfo.LinkWidth.Current))
-		io.WriteString(w, formatValue("nvidiasmi_pci_bridge_chip_type", "uuid=\""+GPU.UUID+"\"", GPU.PCI.BridgeChip.Type))
-		io.WriteString(w, formatValue("nvidiasmi_pci_bridge_chip_fw", "uuid=\""+GPU.UUID+"\"", GPU.PCI.BridgeChip.Fw))
-		io.WriteString(w, formatValue("nvidiasmi_pci_replay_counter", "uuid=\""+GPU.UUID+"\"", GPU.PCI.ReplayRolloverCounter))
-		io.WriteString(w, formatValue("nvidiasmi_pci_replay_rollover_counter", "uuid=\""+GPU.UUID+"\"", GPU.PCI.ReplayRolloverCounter))
-		io.WriteString(w, formatValue("nvidiasmi_pci_tx_util", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.PCI.TxUtil)))
-		io.WriteString(w, formatValue("nvidiasmi_pci_rx_util", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.PCI.RxUtil)))
-		io.WriteString(w, formatValue("nvidiasmi_fan_speed", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.FanSpeed)))
-		io.WriteString(w, formatValue("nvidiasmi_performance_state", "uuid=\""+GPU.UUID+"\"", GPU.PerformanceState))
-		io.WriteString(w, formatValue("nvidiasmi_performance_state_int", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.PerformanceState)))
-		io.WriteString(w, formatValue("nvidiasmi_fb_memory_usage_total", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.FbMemoryUsage.Total)))
-		io.WriteString(w, formatValue("nvidiasmi_fb_memory_usage_used", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.FbMemoryUsage.Used)))
-		io.WriteString(w, formatValue("nvidiasmi_fb_memory_usage_free", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.FbMemoryUsage.Free)))
-		io.WriteString(w, formatValue("nvidiasmi_bar1_memory_usage_total", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.Bar1MemoryUsage.Total)))
-		io.WriteString(w, formatValue("nvidiasmi_bar1_memory_usage_used", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.Bar1MemoryUsage.Used)))
-		io.WriteString(w, formatValue("nvidiasmi_bar1_memory_usage_free", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.Bar1MemoryUsage.Free)))
-		io.WriteString(w, formatValue("nvidiasmi_compute_mode", "uuid=\""+GPU.UUID+"\"", GPU.ComputeMode))
-		io.WriteString(w, formatValue("nvidiasmi_utilization_gpu", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.Utilization.GPUUtil)))
-		io.WriteString(w, formatValue("nvidiasmi_utilization_memory", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.Utilization.MemoryUtil)))
-		io.WriteString(w, formatValue("nvidiasmi_utilization_encoder", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.Utilization.EncoderUtil)))
-		io.WriteString(w, formatValue("nvidiasmi_utilization_decoder", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.Utilization.DecoderUtil)))
-		io.WriteString(w, formatValue("nvidiasmi_encoder_session_count", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.EncoderStats.SessionCount)))
-		io.WriteString(w, formatValue("nvidiasmi_encoder_average_fps", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.EncoderStats.AverageFPS)))
-		io.WriteString(w, formatValue("nvidiasmi_encoder_average_latency", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.EncoderStats.AverageLatency)))
-		io.WriteString(w, formatValue("nvidiasmi_fbc_session_count", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.FBCStats.SessionCount)))
-		io.WriteString(w, formatValue("nvidiasmi_fbc_average_fps", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.FBCStats.AverageFPS)))
-		io.WriteString(w, formatValue("nvidiasmi_fbc_average_latency", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.FBCStats.AverageLatency)))
-		io.WriteString(w, formatValue("nvidiasmi_gpu_temp", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.Temperature.GPUTemp)))
-		io.WriteString(w, formatValue("nvidiasmi_gpu_temp_max_threshold", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.Temperature.GPUTempMaxThreshold)))
-		io.WriteString(w, formatValue("nvidiasmi_gpu_temp_slow_threshold", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.Temperature.GPUTempSlowThreshold)))
-		io.WriteString(w, formatValue("nvidiasmi_gpu_temp_max_gpu_threshold", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.Temperature.GPUTempMaxGpuThreshold)))
-		io.WriteString(w, formatValue("nvidiasmi_memory_temp", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.Temperature.MemoryTemp)))
-		io.WriteString(w, formatValue("nvidiasmi_gpu_temp_max_mem_threshold", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.Temperature.GPUTempMaxMemThreshold)))
-		io.WriteString(w, formatValue("nvidiasmi_power_state", "uuid=\""+GPU.UUID+"\"", GPU.PowerReadings.PowerState))
-		io.WriteString(w, formatValue("nvidiasmi_power_state_int", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.PowerReadings.PowerState)))
-		io.WriteString(w, formatValue("nvidiasmi_power_draw", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.PowerReadings.PowerDraw)))
-		io.WriteString(w, formatValue("nvidiasmi_power_limit", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.PowerReadings.PowerLimit)))
-		io.WriteString(w, formatValue("nvidiasmi_default_power_limit", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.PowerReadings.DefaultPowerLimit)))
-		io.WriteString(w, formatValue("nvidiasmi_enforced_power_limit", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.PowerReadings.EnforcedPowerLimit)))
-		io.WriteString(w, formatValue("nvidiasmi_min_power_limit", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.PowerReadings.MinPowerLimit)))
-		io.WriteString(w, formatValue("nvidiasmi_max_power_limit", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.PowerReadings.MaxPowerLimit)))
-		io.WriteString(w, formatValue("nvidiasmi_clock_graphics", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.Clocks.GraphicsClock)))
-		io.WriteString(w, formatValue("nvidiasmi_clock_graphics_max", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.MaxClocks.GraphicsClock)))
-		io.WriteString(w, formatValue("nvidiasmi_clock_sm", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.Clocks.SmClock)))
-		io.WriteString(w, formatValue("nvidiasmi_clock_sm_max", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.MaxClocks.SmClock)))
-		io.WriteString(w, formatValue("nvidiasmi_clock_mem", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.Clocks.MemClock)))
-		io.WriteString(w, formatValue("nvidiasmi_clock_mem_max", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.MaxClocks.MemClock)))
-		io.WriteString(w, formatValue("nvidiasmi_clock_video", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.Clocks.VideoClock)))
-		io.WriteString(w, formatValue("nvidiasmi_clock_video_max", "uuid=\""+GPU.UUID+"\"", filterNumber(GPU.MaxClocks.VideoClock)))
-		io.WriteString(w, formatValue("nvidiasmi_clock_policy_auto_boost", "uuid=\""+GPU.UUID+"\"", GPU.ClockPolicy.AutoBoost))
-		io.WriteString(w, formatValue("nvidiasmi_clock_policy_auto_boost_default", "uuid=\""+GPU.UUID+"\"", GPU.ClockPolicy.AutoBoostDefault))
+		io.WriteString(w, formatValue("nvidiasmi_pci_pcie_gen_max", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", GPU.PCI.GPULinkInfo.PCIeGen.Max))
+		io.WriteString(w, formatValue("nvidiasmi_pci_pcie_gen_current", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", GPU.PCI.GPULinkInfo.PCIeGen.Current))
+		io.WriteString(w, formatValue("nvidiasmi_pci_link_width_max_multiplicator", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterNumber(GPU.PCI.GPULinkInfo.LinkWidth.Max)))
+		io.WriteString(w, formatValue("nvidiasmi_pci_link_width_current_multiplicator", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterNumber(GPU.PCI.GPULinkInfo.LinkWidth.Current)))
+		io.WriteString(w, formatValue("nvidiasmi_pci_replay_counter", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", GPU.PCI.ReplayRolloverCounter))
+		io.WriteString(w, formatValue("nvidiasmi_pci_replay_rollover_counter", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", GPU.PCI.ReplayRolloverCounter))
+		io.WriteString(w, formatValue("nvidiasmi_pci_tx_util_bytes_per_second", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.PCI.TxUtil)))
+		io.WriteString(w, formatValue("nvidiasmi_pci_rx_util_bytes_per_second", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.PCI.RxUtil)))
+		io.WriteString(w, formatValue("nvidiasmi_fan_speed_percent", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.FanSpeed)))
+		io.WriteString(w, formatValue("nvidiasmi_performance_state_int", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterNumber(GPU.PerformanceState)))
+		io.WriteString(w, formatValue("nvidiasmi_fb_memory_usage_total_bytes", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.FbMemoryUsage.Total)))
+		io.WriteString(w, formatValue("nvidiasmi_fb_memory_usage_used_bytes", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.FbMemoryUsage.Used)))
+		io.WriteString(w, formatValue("nvidiasmi_fb_memory_usage_free_bytes", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.FbMemoryUsage.Free)))
+		io.WriteString(w, formatValue("nvidiasmi_bar1_memory_usage_total_bytes", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.Bar1MemoryUsage.Total)))
+		io.WriteString(w, formatValue("nvidiasmi_bar1_memory_usage_used_bytes", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.Bar1MemoryUsage.Used)))
+		io.WriteString(w, formatValue("nvidiasmi_bar1_memory_usage_free_bytes", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.Bar1MemoryUsage.Free)))
+		io.WriteString(w, formatValue("nvidiasmi_utilization_gpu_percent", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.Utilization.GPUUtil)))
+		io.WriteString(w, formatValue("nvidiasmi_utilization_memory_percent", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.Utilization.MemoryUtil)))
+		io.WriteString(w, formatValue("nvidiasmi_utilization_encoder_percent", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.Utilization.EncoderUtil)))
+		io.WriteString(w, formatValue("nvidiasmi_utilization_decoder_percent", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.Utilization.DecoderUtil)))
+		io.WriteString(w, formatValue("nvidiasmi_encoder_session_count", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", GPU.EncoderStats.SessionCount))
+		io.WriteString(w, formatValue("nvidiasmi_encoder_average_fps", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", GPU.EncoderStats.AverageFPS))
+		io.WriteString(w, formatValue("nvidiasmi_encoder_average_latency", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", GPU.EncoderStats.AverageLatency))
+		io.WriteString(w, formatValue("nvidiasmi_fbc_session_count", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", GPU.FBCStats.SessionCount))
+		io.WriteString(w, formatValue("nvidiasmi_fbc_average_fps", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", GPU.FBCStats.AverageFPS))
+		io.WriteString(w, formatValue("nvidiasmi_fbc_average_latency", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", GPU.FBCStats.AverageLatency))
+		io.WriteString(w, formatValue("nvidiasmi_gpu_temp_celsius", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.Temperature.GPUTemp)))
+		io.WriteString(w, formatValue("nvidiasmi_gpu_temp_max_threshold_celsius", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.Temperature.GPUTempMaxThreshold)))
+		io.WriteString(w, formatValue("nvidiasmi_gpu_temp_slow_threshold_celsius", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.Temperature.GPUTempSlowThreshold)))
+		io.WriteString(w, formatValue("nvidiasmi_gpu_temp_max_gpu_threshold_celsius", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.Temperature.GPUTempMaxGpuThreshold)))
+		io.WriteString(w, formatValue("nvidiasmi_memory_temp_celsius", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.Temperature.MemoryTemp)))
+		io.WriteString(w, formatValue("nvidiasmi_gpu_temp_max_mem_threshold_celsius", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.Temperature.GPUTempMaxMemThreshold)))
+		io.WriteString(w, formatValue("nvidiasmi_power_state_int", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterNumber(GPU.PowerReadings.PowerState)))
+		io.WriteString(w, formatValue("nvidiasmi_power_draw_watts", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.PowerReadings.PowerDraw)))
+		io.WriteString(w, formatValue("nvidiasmi_power_limit_watts", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.PowerReadings.PowerLimit)))
+		io.WriteString(w, formatValue("nvidiasmi_default_power_limit_watts", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.PowerReadings.DefaultPowerLimit)))
+		io.WriteString(w, formatValue("nvidiasmi_enforced_power_limit_watts", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.PowerReadings.EnforcedPowerLimit)))
+		io.WriteString(w, formatValue("nvidiasmi_min_power_limit_watts", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.PowerReadings.MinPowerLimit)))
+		io.WriteString(w, formatValue("nvidiasmi_max_power_limit_watts", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.PowerReadings.MaxPowerLimit)))
+		io.WriteString(w, formatValue("nvidiasmi_clock_graphics_hertz", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.Clocks.GraphicsClock)))
+		io.WriteString(w, formatValue("nvidiasmi_clock_graphics_max_hertz", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.MaxClocks.GraphicsClock)))
+		io.WriteString(w, formatValue("nvidiasmi_clock_sm_hertz", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.Clocks.SmClock)))
+		io.WriteString(w, formatValue("nvidiasmi_clock_sm_max_hertz", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.MaxClocks.SmClock)))
+		io.WriteString(w, formatValue("nvidiasmi_clock_mem_hertz", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.Clocks.MemClock)))
+		io.WriteString(w, formatValue("nvidiasmi_clock_mem_max_hertz", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.MaxClocks.MemClock)))
+		io.WriteString(w, formatValue("nvidiasmi_clock_video_hertz", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.Clocks.VideoClock)))
+		io.WriteString(w, formatValue("nvidiasmi_clock_video_max_hertz", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.MaxClocks.VideoClock)))
+		io.WriteString(w, formatValue("nvidiasmi_clock_policy_auto_boost", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.ClockPolicy.AutoBoost)))
+		io.WriteString(w, formatValue("nvidiasmi_clock_policy_auto_boost_default", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterUnit(GPU.ClockPolicy.AutoBoostDefault)))
 		for _, Process := range GPU.Processes.ProcessInfo {
-			io.WriteString(w, formatValue("nvidiasmi_process_pid", "uuid=\""+GPU.UUID+"\",pid=\""+Process.Pid+"\"", Process.Pid))
-			io.WriteString(w, formatValue("nvidiasmi_process_type", "uuid=\""+GPU.UUID+"\",pid=\""+Process.Pid+"\"", Process.Type))
-			io.WriteString(w, formatValue("nvidiasmi_process_name", "uuid=\""+GPU.UUID+"\",pid=\""+Process.Pid+"\"", Process.ProcessName))
-			io.WriteString(w, formatValue("nvidiasmi_process_used_memory", "uuid=\""+GPU.UUID+"\",pid=\""+Process.Pid+"\"", filterNumber(Process.UsedMemory)))
+			io.WriteString(w, formatValue("nvidiasmi_process_used_memory_bytes", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\",process_pid=\""+Process.Pid+"\",process_type=\""+Process.Type+"\"", filterUnit(Process.UsedMemory)))
 		}
 	}
 }
