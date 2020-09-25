@@ -1,8 +1,8 @@
 <?xml version="1.0" ?>
 <!DOCTYPE nvidia_smi_log SYSTEM "nvsmi_device_v10.dtd">
 <nvidia_smi_log>
-	<timestamp>Fri May 22 16:53:43 2020</timestamp>
-	<driver_version>440.82</driver_version>
+	<timestamp>Fri Sep 25 16:51:39 2020</timestamp>
+	<driver_version>440.95.01</driver_version>
 	<cuda_version>10.2</cuda_version>
 	<attached_gpus>1</attached_gpus>
 	<gpu id="00000000:01:00.0">

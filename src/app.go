@@ -248,6 +248,16 @@ type NvidiaSmiLog struct {
 	} `xml:"gpu"`
 }
 
+func formatVersion(key string, meta string, value string) string {
+	r := regexp.MustCompile(`(?P<version>\d+\.\d+).*`)
+	match := r.FindStringSubmatch(value)
+	version := "0"
+	if len(match) > 0 {
+		version = match[1]
+	}
+	return formatValue(key, meta, version)
+}
+
 func formatValue(key string, meta string, value string) string {
 	result := key
 	if meta != "" {
@@ -326,7 +336,7 @@ func metrics(w http.ResponseWriter, r *http.Request) {
 	xml.Unmarshal(stdout, &xmlData)
 
 	// Output
-	io.WriteString(w, formatValue("nvidiasmi_driver_version", "", xmlData.DriverVersion))
+	io.WriteString(w, formatVersion("nvidiasmi_driver_version", "", xmlData.DriverVersion))
 	io.WriteString(w, formatValue("nvidiasmi_cuda_version", "", xmlData.CudaVersion))
 	io.WriteString(w, formatValue("nvidiasmi_attached_gpus", "", xmlData.AttachedGPUs))
 	for _, GPU := range xmlData.GPU {
