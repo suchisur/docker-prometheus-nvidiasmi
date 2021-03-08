@@ -1,10 +1,14 @@
-version: "2.3"
+version: "3"
 services:
   prometheus-nvidiasmi:
     build:
       context: .
+      dockerfile: Dockerfile.dev
     # environment:
     #   - TEST_MODE=1
     ports:
       - "9202:9202"
     runtime: nvidia
+    volumes:
+      - ./src/app.go:/go/app.go
+      - ./nvidia-smi.sample.xml:/go/nvidia-smi.sample.xml:ro
