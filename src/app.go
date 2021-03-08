@@ -336,10 +336,10 @@ func metrics(w http.ResponseWriter, r *http.Request) {
 	xml.Unmarshal(stdout, &xmlData)
 
 	// Output
-	io.WriteString(w, formatVersion("nvidiasmi_driver_version", "", xmlData.DriverVersion))
-	io.WriteString(w, formatValue("nvidiasmi_cuda_version", "", xmlData.CudaVersion))
-	io.WriteString(w, formatValue("nvidiasmi_attached_gpus", "", xmlData.AttachedGPUs))
 	for _, GPU := range xmlData.GPU {
+		io.WriteString(w, formatVersion("nvidiasmi_driver_version", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", xmlData.DriverVersion))
+		io.WriteString(w, formatVersion("nvidiasmi_cuda_version", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", xmlData.CudaVersion))
+		io.WriteString(w, formatValue("nvidiasmi_attached_gpus", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", xmlData.AttachedGPUs))
 		io.WriteString(w, formatValue("nvidiasmi_pci_pcie_gen_max", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", GPU.PCI.GPULinkInfo.PCIeGen.Max))
 		io.WriteString(w, formatValue("nvidiasmi_pci_pcie_gen_current", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", GPU.PCI.GPULinkInfo.PCIeGen.Current))
 		io.WriteString(w, formatValue("nvidiasmi_pci_link_width_max_multiplicator", "id=\""+GPU.Id+"\",uuid=\""+GPU.UUID+"\",name=\""+GPU.ProductName+"\"", filterNumber(GPU.PCI.GPULinkInfo.LinkWidth.Max)))
