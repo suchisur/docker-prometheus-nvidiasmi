@@ -668,7 +668,7 @@
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{name}} Temp",
+          "legendFormat": "{{name}} Power",
           "refId": "A"
         }
       ],
