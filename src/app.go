@@ -267,6 +267,9 @@ func formatValue(key string, meta string, value string) string {
 }
 
 func filterUnit(s string) string {
+	if s == "N/A" {
+		return "0"
+	}
 	r := regexp.MustCompile(`(?P<value>[\d\.]+) (?P<power>[KMGT]?[i]?)(?P<unit>.*)`)
 	match := r.FindStringSubmatch(s)
 	if len(match) == 0 {
@@ -306,6 +309,9 @@ func filterUnit(s string) string {
 }
 
 func filterNumber(value string) string {
+	if value == "N/A" {
+		return "0"
+	}
 	r := regexp.MustCompile("[^0-9.]")
 	return r.ReplaceAllString(value, "")
 }
@@ -328,6 +334,9 @@ func metrics(w http.ResponseWriter, r *http.Request) {
 	stdout, err := cmd.Output()
 	if err != nil {
 		println(err.Error())
+		if testMode != "1" {
+			println("Something went wrong with the execution of nvidia-smi")
+		}
 		return
 	}
 
