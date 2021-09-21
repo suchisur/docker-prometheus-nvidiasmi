@@ -7,8 +7,10 @@ services:
     # environment:
     #   - TEST_MODE=1
     ports:
-      - "9202:9202"
+      - 9202:9202/tcp
+    privileged: true
     runtime: nvidia
+    tty: true
     volumes:
       - ./src/app.go:/go/app.go
       - ./nvidia-smi.sample.xml:/go/nvidia-smi.sample.xml:ro

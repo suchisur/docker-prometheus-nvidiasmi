@@ -5,7 +5,20 @@ Supports multiple GPUs.
 
 # How-To
 
-`docker run --runtime nvidia -p 9202:9202/tcp e7db/prometheus-nvidiasmi`
+Run with a Docker command:
+`docker run --privileged --runtime nvidia -p 9202:9202/tcp e7db/prometheus-nvidiasmi`
+
+Run through a docker-compose file:
+```
+version: "3"
+services:
+  prometheus-nvidiasmi:
+    image: e7db/prometheus-nvidiasmi
+    privileged: true
+    runtime: nvidia
+    ports:
+      - "9202:9202/tcp"
+```
 
 Check result at: [http://localhost:9202/metrics](http://localhost:9202/metrics)
 

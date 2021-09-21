@@ -1,4 +1,4 @@
-FROM nvidia/cuda:11.1-base
+FROM nvidia/cuda:11.4.0-base
 
 LABEL maintainer='Michaël "e7d" Ferrand <michael@e7d.io>'
 
